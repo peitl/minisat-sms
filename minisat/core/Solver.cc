@@ -19,6 +19,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 #include <math.h>
+#include <vector>
 
 #include "minisat/mtl/Alg.h"
 #include "minisat/mtl/Sort.h"
@@ -992,11 +993,11 @@ void Solver::printStats() const
 {
     double cpu_time = cpuTime();
     double mem_used = memUsedPeak();
-    printf("restarts              : %"PRIu64"\n", starts);
-    printf("conflicts             : %-12"PRIu64"   (%.0f /sec)\n", conflicts   , conflicts   /cpu_time);
-    printf("decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", decisions, (float)rnd_decisions*100 / (float)decisions, decisions   /cpu_time);
-    printf("propagations          : %-12"PRIu64"   (%.0f /sec)\n", propagations, propagations/cpu_time);
-    printf("conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", tot_literals, (max_literals - tot_literals)*100 / (double)max_literals);
+    printf("restarts              : %" PRIu64"\n", starts);
+    printf("conflicts             : %-12" PRIu64"   (%.0f /sec)\n", conflicts   , conflicts   /cpu_time);
+    printf("decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", decisions, (float)rnd_decisions*100 / (float)decisions, decisions   /cpu_time);
+    printf("propagations          : %-12" PRIu64"   (%.0f /sec)\n", propagations, propagations/cpu_time);
+    printf("conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", tot_literals, (max_literals - tot_literals)*100 / (double)max_literals);
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("CPU time              : %g s\n", cpu_time);
 }
@@ -1063,4 +1064,71 @@ void Solver::garbageCollect()
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n", 
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
+}
+
+extern "C" {
+
+  void* create_solver() {
+    return new(std::nothrow) Solver();
+  }
+
+  void destroy_solver(void* sms_solver) {
+    delete (Solver*) sms_solver;
+  }
+ 
+  void add(void* sms_solver, int lit) {
+    Solver* s = (Solver*) sms_solver;
+    if (lit != 0) {
+	  Var v = abs(lit) - 1;
+	  while (v >= s->nVars())
+		s->newVar();
+      s->tmp_clause.push(s->i2l(lit));
+    } else {
+      s->addTmpClause();
+    }
+  }
+
+  // call after all clauses have been added
+  // performs unit propagation and returns -1, 0, 1 if the formula is
+  // falsified, undecided, satisfied
+
+  PropLits propagate(void* sms_solver) {
+    Solver* s = (Solver*) sms_solver;
+    CRef cref = s->propagate();
+    int num_prop_lits = s->nAssigns() - s->trail_lim.last();
+    if (cref != CRef_Undef) {
+      return {CONFLICT, num_prop_lits};
+    } else if (s->nAssigns() == s->nVars()) {
+      return {SAT, num_prop_lits};
+    } else {
+      return {OPEN, num_prop_lits};
+    }
+  }
+
+  int get_propagated_literal(void* sms_solver) {
+    Solver* s = (Solver*) sms_solver;
+	if (s->literator == -1) {
+		s->literator = s->trail_lim.last() + 1; // index of last decision level on trail
+	}
+
+	if (s->literator < s->trail.size()) {
+		return s->l2i(s->trail[s->literator++]);
+	} else {
+		s->literator = -1;
+		return 0;
+	}
+  }
+
+  PropLits assign_literal(void* sms_solver, int literal) {
+    Solver* s = (Solver*) sms_solver;
+	s->newDecisionLevel();
+	s->uncheckedEnqueue(s->i2l(literal));
+	return propagate(sms_solver);
+  }
+
+  void backtrack(void* sms_solver, int num_dec_levels) {
+    Solver* s = (Solver*) sms_solver;
+	s->cancelUntil(s->decisionLevel() - num_dec_levels);
+  }
+
 }

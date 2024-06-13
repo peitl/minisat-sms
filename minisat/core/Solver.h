@@ -27,6 +27,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "minisat/mtl/IntMap.h"
 #include "minisat/utils/Options.h"
 #include "minisat/core/SolverTypes.h"
+#include <vector>
 
 
 namespace Minisat {
@@ -46,7 +47,24 @@ public:
     //
     Var     newVar    (lbool upol = l_Undef, bool dvar = true); // Add a new variable with parameters specifying variable mode.
     void    releaseVar(Lit l);                                  // Make literal true and promise to never refer to variable again.
+																//
+    vec<Lit> tmp_clause;		                                // collect literals 1 by 1 for a clause to be added
 
+	inline Lit i2l(int lit) {
+		int d = lit > 0; //{ 0, 1}
+		int f = 2*d - 1; //{-1, 1}
+		Lit l;
+		l.x = f*2*lit-1-d;
+		return l;
+	}
+
+	inline int l2i(Lit lit) {
+		int s = 1 - (lit.x % 2) * 2;
+		int v = lit.x / 2 + 1;
+		return v * s;
+	}
+
+    bool    addTmpClause () {bool b = addClause(tmp_clause); tmp_clause.clear(); return b;}; 
     bool    addClause (const vec<Lit>& ps);                     // Add a clause to the solver. 
     bool    addEmptyClause();                                   // Add the empty clause, making the solver contradictory.
     bool    addClause (Lit p);                                  // Add a unit clause to the solver. 
@@ -151,7 +169,7 @@ public:
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
 
-protected:
+public:
 
     // Helper structures:
     //
@@ -184,6 +202,9 @@ protected:
         Lit      l;
         ShrinkStackElem(uint32_t _i, Lit _l) : i(_i), l(_l){}
     };
+
+	// SMS + step-by-step controls
+	int literator = -1;
 
     // Solver state:
     //
@@ -404,6 +425,26 @@ inline void     Solver::toDimacs     (const char* file, Lit p, Lit q, Lit r){ ve
 
 
 //=================================================================================================
+}
+
+enum PropResult {
+CONFLICT = -1,
+OPEN = 0,
+SAT = 1
+};
+
+typedef struct PropLits {
+PropResult result; // -1, 0, 1
+int num_prop_lits;
+} PropLits; 
+
+extern "C" {
+
+  void* create_solver();
+  void add(void* sms_solver, int literal);
+  void destroy_solver(void* sms_solver);
+  PropLits assign_literal(void* solver, int literal);
+  void backtrack(void* solver, int num_dec_levels);
 }
 
 #endif

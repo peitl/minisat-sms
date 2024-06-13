@@ -18,11 +18,9 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#include <errno.h>
 #include <zlib.h>
 
 #include "minisat/utils/System.h"
-#include "minisat/utils/ParseUtils.h"
 #include "minisat/utils/Options.h"
 #include "minisat/core/Dimacs.h"
 #include "minisat/core/Solver.h"
