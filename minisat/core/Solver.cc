@@ -1094,9 +1094,9 @@ extern "C" {
 
   PropLits propagate(void* sms_solver) {
     Solver* s = (Solver*) sms_solver;
-    CRef cref = s->propagate();
+    s->cflr = s->propagate();
     int num_prop_lits = s->nAssigns() - s->trail_lim.last();
-    if (cref != CRef_Undef) {
+    if (s->cflr != CRef_Undef) {
       return {CONFLICT, num_prop_lits};
     } else if (s->nAssigns() == s->nVars()) {
       return {SAT, num_prop_lits};
@@ -1107,28 +1107,55 @@ extern "C" {
 
   int get_propagated_literal(void* sms_solver) {
     Solver* s = (Solver*) sms_solver;
-	if (s->literator == -1) {
-		s->literator = s->trail_lim.last() + 1; // index of last decision level on trail
-	}
+    if (s->literator == -1) {
+      s->literator = s->trail_lim.last() + 1; // index of last decision level on trail
+    }
 
-	if (s->literator < s->trail.size()) {
-		return s->l2i(s->trail[s->literator++]);
-	} else {
-		s->literator = -1;
-		return 0;
-	}
+    if (s->literator < s->trail.size()) {
+      return s->l2i(s->trail[s->literator++]);
+    } else {
+      s->literator = -1;
+      return 0;
+    }
   }
 
   PropLits assign_literal(void* sms_solver, int literal) {
     Solver* s = (Solver*) sms_solver;
-	s->newDecisionLevel();
-	s->uncheckedEnqueue(s->i2l(literal));
-	return propagate(sms_solver);
+    s->newDecisionLevel();
+    s->uncheckedEnqueue(s->i2l(literal));
+    return propagate(sms_solver);
   }
 
-  void backtrack(void* sms_solver, int num_dec_levels) {
+  int backtrack(void* sms_solver, int num_dec_levels) {
     Solver* s = (Solver*) sms_solver;
-	s->cancelUntil(s->decisionLevel() - num_dec_levels);
+    int target_dec_lev = s->decisionLevel() - num_dec_levels;
+    if (target_dec_lev >= 0) {
+      s->cancelUntil(target_dec_lev);
+      return 1;
+    }
+    return 0;
+  }
+
+  PropLits learn_clause(void* sms_solver) {
+    Solver* s = (Solver*) sms_solver;
+    if (s->cflr == CRef_Undef) {
+      return {OPEN, 0};
+    }
+    s->lrncls.clear();
+    s->analyze(s->cflr, s->lrncls, s->btlev);
+    s->cancelUntil(s->btlev);
+
+    if (s->lrncls.size() == 1) {
+      s->uncheckedEnqueue(s->lrncls[0]);
+      return propagate(sms_solver);
+    } else {
+      CRef cr = s->ca.alloc(s->lrncls, true);
+      s->learnts.push(cr);
+      s->attachClause(cr);
+      s->claBumpActivity(s->ca[cr]);
+      s->uncheckedEnqueue(s->lrncls[0], cr);
+      return propagate(sms_solver);
+    }
   }
 
 }

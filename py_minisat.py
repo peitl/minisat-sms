@@ -18,6 +18,7 @@ sms_destroy_solver = smslib.destroy_solver
 sms_assign_literal = smslib.assign_literal
 sms_backtrack = smslib.backtrack
 sms_get_propagated_literal = smslib.get_propagated_literal
+sms_learn_clause = smslib.learn_clause
 
 # specify function signatures
 sms_create_solver.argtypes = []
@@ -31,9 +32,11 @@ sms_destroy_solver.restype = None
 sms_assign_literal.argtypes = [ct.c_void_p]
 sms_assign_literal.restype = PropLits
 sms_backtrack.argtypes = [ct.c_void_p, ct.c_int]
-sms_backtrack.restype = None
+sms_backtrack.restype = ct.c_int
 sms_get_propagated_literal.argtypes = [ct.c_void_p]
 sms_get_propagated_literal.restype = ct.c_int
+sms_learn_clause.argtypes = [ct.c_void_p]
+sms_learn_clause.restype = PropLits
 
 
 class Solver:
@@ -70,6 +73,10 @@ class Solver:
     def backtrack(self, levels:int = 1):
         sms_backtrack(self.sms_solver, levels)
 
+    def learnClause(self):
+        pl = sms_learn_clause(self.sms_solver)
+        return pl.result, pl.num_prop_lits
+
 
 if __name__ == "__main__":
     #n = int(sys.argv[1])
@@ -78,19 +85,22 @@ if __name__ == "__main__":
     solver.addClause([-1, 2])
     solver.addClause([-2, 3])
     solver.addClause([-3, 4])
-    solver.assignLiteral(1)
+    solver.addClause([ 3, 4])
+    print(solver.assignLiteral(1))
     for lit in solver.getPropagatedLiterals():
         print(lit)
     solver.backtrack(1)
     print("---")
-    solver.assignLiteral(-1)
+    print(solver.assignLiteral(-1))
     for lit in solver.getPropagatedLiterals():
         print(lit)
     solver.backtrack(1)
     print("---")
-    solver.assignLiteral(-3)
+    print(solver.assignLiteral(-4))
     for lit in solver.getPropagatedLiterals():
         print(lit)
-    solver.backtrack(1)
+    print(solver.learnClause());
+    if not solver.backtrack(1):
+        print("Backtracking 1 level failed (most likely because current decision level is 0)")
     print("---")
     del solver

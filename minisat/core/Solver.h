@@ -203,8 +203,11 @@ public:
         ShrinkStackElem(uint32_t _i, Lit _l) : i(_i), l(_l){}
     };
 
-	// SMS + step-by-step controls
-	int literator = -1;
+    // SMS + step-by-step controls
+    int literator = -1;
+    int btlev = -1;
+    CRef cflr = CRef_Undef;
+    vec<Lit> lrncls;
 
     // Solver state:
     //
@@ -444,7 +447,8 @@ extern "C" {
   void add(void* sms_solver, int literal);
   void destroy_solver(void* sms_solver);
   PropLits assign_literal(void* solver, int literal);
-  void backtrack(void* solver, int num_dec_levels);
+  int backtrack(void* solver, int num_dec_levels);
+  PropLits learn_clause(void* sms_solver);
 }
 
 #endif
