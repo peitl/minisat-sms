@@ -19,7 +19,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 #include <math.h>
-#include <vector>
 
 #include "minisat/mtl/Alg.h"
 #include "minisat/mtl/Sort.h"
@@ -1066,6 +1065,29 @@ void Solver::garbageCollect()
     to.moveTo(ca);
 }
 
+int compare( const void* a, const void* b) {
+   int int_a = * ( (int*) a );
+   int int_b = * ( (int*) b );
+
+   return (int_a > int_b) - (int_a < int_b);
+}
+
+int in(int* begin, int* end, int val) {
+	if (end - begin < 1) {
+		return 0;
+	}
+	if (end - begin == 1) {
+		return *begin == val;
+	}
+	int* m = begin + (end - begin) / 2;
+	if (*m <= val) {
+		begin = m;
+	} else {
+		end = m;
+	}
+	return in(begin, end, val);
+}
+
 extern "C" {
 
   void* create_solver() {
@@ -1105,19 +1127,39 @@ extern "C" {
     }
   }
 
-  int get_propagated_literal(void* sms_solver) {
+  // always call this before a sequence of next_prop_lit
+  // will yield all assigned literals starting with some decision level
+  int request_propagation_scope(void* sms_solver, int level) {
     Solver* s = (Solver*) sms_solver;
-    if (s->literator == -1) {
-      s->literator = s->trail_lim.last() + 1; // index of last decision level on trail
+    if (level == 0) {
+      s->literator = 0;
+    } else if (level < 0 || level > s->decisionLevel()) {
+      return 0;
+    } else {
+      s->literator = s->trail_lim[level-1];
     }
+    return 1;
+  }
 
-    if (s->literator < s->trail.size()) {
+  int next_prop_lit(void* sms_solver) {
+    Solver* s = (Solver*) sms_solver;
+    if (s->literator >= 0 && s->literator < s->trail.size()) {
       return s->l2i(s->trail[s->literator++]);
     } else {
-      s->literator = -1;
+      s->literator = -1; // iterator exhausted
       return 0;
     }
   }
+
+  // TODO
+  /*int next_conflict_lit(void* sms_solver) {
+    Solver* s = (Solver*) sms_solver;
+    if (s->cflterator > s->conflict.size()) {
+      s->cflterator = 0;
+      return 0;
+    } else {
+    }  
+  }*/
 
   PropLits assign_literal(void* sms_solver, int literal) {
     Solver* s = (Solver*) sms_solver;
@@ -1155,6 +1197,60 @@ extern "C" {
       s->claBumpActivity(s->ca[cr]);
       s->uncheckedEnqueue(s->lrncls[0], cr);
       return propagate(sms_solver);
+    }
+  }
+
+  AssignmentSwitchResult fast_switch_assignment(void* sms_solver, int length, int* literals) {
+	  Solver* s = (Solver*) sms_solver;
+	  int n_unassigned = 0;
+	  for (int i = 0; i < length; i++) {
+		  Lit l = s->i2l(literals[i]);
+		  if (s->value(var(l)) == l_Undef) {
+			  int t = literals[n_unassigned];
+			  literals[n_unassigned++] = literals[i];
+			  literals[i] = t;
+		  }
+	  }
+	  qsort (literals, sizeof(int), length - n_unassigned, compare);
+
+	  int btlev;
+	  for (btlev = 0; btlev < s->decisionLevel(); btlev++) {
+		  Lit dec = s->trail[s->trail_lim[btlev]]; // trail_lim[0] should be the first decision
+		  if (!in(literals + n_unassigned, literals + length, s->l2i(dec))) {
+			  break;
+		  }
+	  }
+	  s->cancelUntil(btlev);
+
+    int num_prop_lits = s->nAssigns();
+    int num_decisions_executed = 0;
+    // this function will report the total number of propagated literals including propagations that had already been in place
+	  for (int i = 0; i < length; i++) {
+		  Lit l = s->i2l(literals[i]);
+		  if (s->value(l) == l_Undef) {
+        num_decisions_executed++;
+			  s->newDecisionLevel();
+			  s->uncheckedEnqueue(l);
+			  s->cflr = s->propagate();
+			  if (s->cflr != CRef_Undef) {
+			    return {CONFLICT, num_decisions_executed, num_prop_lits};
+			  }
+		  } else if (s->value(l) == l_False) {
+        // conflict (attempt to assign counter to current value)
+        // WARNING: this returns a conflict state, but the solver is actually not in conflict, it is only about to enter one
+        // a clause cannot be learned the usual way, must call analyzeFinal
+        s->analyzeFinal(l, s->conflict);
+        s->cflterator = 0;
+        return {INCONSISTENT_ASSUMPTIONS, num_decisions_executed + 1, num_prop_lits + 1};
+      } else {
+        // attempt to assign in a way that was already propagated, just ignore
+      }
+	  }
+
+    if (s->nAssigns() == s->nVars()) {
+      return {SAT, num_decisions_executed, num_prop_lits};
+    } else { 
+      return {OPEN, num_decisions_executed, num_prop_lits};
     }
   }
 

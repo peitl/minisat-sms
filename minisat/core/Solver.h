@@ -205,6 +205,7 @@ public:
 
     // SMS + step-by-step controls
     int literator = -1;
+    int cflterator = -1;
     int btlev = -1;
     CRef cflr = CRef_Undef;
     vec<Lit> lrncls;
@@ -431,6 +432,7 @@ inline void     Solver::toDimacs     (const char* file, Lit p, Lit q, Lit r){ ve
 }
 
 enum PropResult {
+INCONSISTENT_ASSUMPTIONS = -2,
 CONFLICT = -1,
 OPEN = 0,
 SAT = 1
@@ -441,6 +443,12 @@ PropResult result; // -1, 0, 1
 int num_prop_lits;
 } PropLits; 
 
+typedef struct AssignmentSwitchResult {
+  PropResult result;
+  int num_decisions_executed;
+  int num_prop_lits;
+} AssignmentSwitchResult;
+
 extern "C" {
 
   void* create_solver();
@@ -449,6 +457,9 @@ extern "C" {
   PropLits assign_literal(void* solver, int literal);
   int backtrack(void* solver, int num_dec_levels);
   PropLits learn_clause(void* sms_solver);
+  AssignmentSwitchResult fast_switch_assignment(void* solver, int length, int* literals);
+  int request_propagation_scope(void* solver, int level);
+  int next_prop_lit(void* solver);
 }
 
 #endif
