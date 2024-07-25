@@ -23,9 +23,6 @@ class AssignmentSwitchResult(ct.Structure):
                 ('num_decisions_executed', ct.c_int),
                 ('num_prop_lits', ct.c_int)]
 
-    def __str__(self):
-        return f"{STATUS[self.result]"
-
 # load functions into aliases
 sms_create_solver = smslib.create_solver
 sms_add = smslib.add
@@ -36,6 +33,7 @@ sms_next_prop_lit = smslib.next_prop_lit
 sms_request_propagation_scope = smslib.request_propagation_scope
 sms_fast_switch_assignment = smslib.fast_switch_assignment
 sms_learn_clause = smslib.learn_clause
+sms_run_solver = smslib.run_solver
 
 # specify function signatures
 sms_create_solver.argtypes = []
@@ -58,6 +56,8 @@ sms_next_prop_lit.argtypes = [ct.c_void_p]
 sms_next_prop_lit.restype = ct.c_int
 sms_learn_clause.argtypes = [ct.c_void_p]
 sms_learn_clause.restype = PropLits
+sms_run_solver.argtypes = [ct.c_void_p, ct.c_double]
+sms_run_solver.restype = ct.c_int
 
 
 class Solver:
@@ -106,6 +106,23 @@ class Solver:
         pl = sms_learn_clause(self.sms_solver)
         return pl.result, pl.num_prop_lits
 
+    def solve(self, time : float): #time in seconds
+        return sms_run_solver(self.sms_solver, time)
+
+
+def genPHP(n : int):
+    PHP = []
+    phvar = lambda p, h: 1 + p*n + h
+
+    for p in range(n+1):
+        PHP.append([phvar(p, h) for h in range(n)])
+
+    for h in range(n):
+        for p1 in range(n+1):
+            for p2 in range(p1+1, n+1):
+                PHP.append([-phvar(p1, h), -phvar(p2, h)])
+
+    return PHP
 
 if __name__ == "__main__":
 
@@ -116,6 +133,8 @@ if __name__ == "__main__":
         [-3, 4],
         [ 3, 4]
         ])
+    test_formulas.append(genPHP(3))
+    test_formulas.append(genPHP(11))
     #n = int(sys.argv[1])
     t = 0
     for F in test_formulas:
@@ -146,5 +165,7 @@ if __name__ == "__main__":
         print(solver.switchAssignment([2, -3]))
         for lit in solver.getPropagatedLiterals():
             print(lit)
+
+        print(f"Solve result: {solver.solve(10.0)}")
 
         del solver

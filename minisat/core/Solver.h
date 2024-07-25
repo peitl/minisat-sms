@@ -168,6 +168,7 @@ public:
     //
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
+    double solve_time;
 
 public:
 
@@ -259,6 +260,7 @@ public:
     //
     int64_t             conflict_budget;    // -1 means no budget.
     int64_t             propagation_budget; // -1 means no budget.
+    double              time_budget;        // -1 means no budget.
     bool                asynch_interrupt;
 
     // Main internal methods:
@@ -399,7 +401,9 @@ inline void     Solver::budgetOff(){ conflict_budget = propagation_budget = -1; 
 inline bool     Solver::withinBudget() const {
     return !asynch_interrupt &&
            (conflict_budget    < 0 || conflicts < (uint64_t)conflict_budget) &&
-           (propagation_budget < 0 || propagations < (uint64_t)propagation_budget); }
+           (propagation_budget < 0 || propagations < (uint64_t)propagation_budget) &&
+           (time_budget < 0 || solve_time < time_budget)
+           ; }
 
 // FIXME: after the introduction of asynchronous interrruptions the solve-versions that return a
 // pure bool do not give a safe interface. Either interrupts must be possible to turn off here, or
@@ -460,6 +464,7 @@ extern "C" {
   AssignmentSwitchResult fast_switch_assignment(void* solver, int length, int* literals);
   int request_propagation_scope(void* solver, int level);
   int next_prop_lit(void* solver);
+  int run_solver(void* solver, double secs); // -1 secs means indefinitely
 }
 
 #endif

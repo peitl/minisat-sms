@@ -19,6 +19,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 #include <math.h>
+#include <time.h>
 
 #include "minisat/mtl/Alg.h"
 #include "minisat/mtl/Sort.h"
@@ -100,6 +101,7 @@ Solver::Solver() :
     //
   , conflict_budget    (-1)
   , propagation_budget (-1)
+  , time_budget        (-1)
   , asynch_interrupt   (false)
 {}
 
@@ -702,12 +704,16 @@ bool Solver::simplify()
 lbool Solver::search(int nof_conflicts)
 {
     assert(ok);
+    clock_t search_start = clock(), search_end;
     int         backtrack_level;
     int         conflictC = 0;
     vec<Lit>    learnt_clause;
     starts++;
 
     for (;;){
+        search_end = clock();
+        solve_time += double(search_end - search_start) / CLOCKS_PER_SEC;
+        search_start = search_end;
         CRef confl = propagate();
         if (confl != CRef_Undef){
             // CONFLICT
@@ -843,6 +849,7 @@ lbool Solver::solve_()
     if (!ok) return l_False;
 
     solves++;
+    solve_time = 0.0; // we reset the solve_time record, so that successive calls to time-limited solve with the same budget will each get to use that budget, but note that we do not reset the conflict counter or any such
 
     max_learnts = nClauses() * learntsize_factor;
     if (max_learnts < min_learnts_lim)
@@ -1251,6 +1258,19 @@ extern "C" {
       return {SAT, num_decisions_executed, num_prop_lits};
     } else { 
       return {OPEN, num_decisions_executed, num_prop_lits};
+    }
+  }
+
+  int run_solver(void* sms_solver, double secs) {
+	  Solver* s = (Solver*) sms_solver;
+    s->time_budget = secs;
+    lbool result = s->solve_();
+    if (result == l_True) {
+      return 10;
+    } else if (result == l_False) {
+      return 20;
+    } else {
+      return 0;
     }
   }
 
