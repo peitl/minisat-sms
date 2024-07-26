@@ -3,6 +3,7 @@
 
 import ctypes as ct
 import sys
+import itertools
 #import pysms
 
 smslib = ct.CDLL("libminisat.so")
@@ -34,6 +35,9 @@ sms_request_propagation_scope = smslib.request_propagation_scope
 sms_fast_switch_assignment = smslib.fast_switch_assignment
 sms_learn_clause = smslib.learn_clause
 sms_run_solver = smslib.run_solver
+sms_model_value = smslib.model_value
+sms_block_model = smslib.block_model
+sms_n_vars = smslib.n_vars
 
 # specify function signatures
 sms_create_solver.argtypes = []
@@ -58,11 +62,17 @@ sms_learn_clause.argtypes = [ct.c_void_p]
 sms_learn_clause.restype = PropLits
 sms_run_solver.argtypes = [ct.c_void_p, ct.c_double]
 sms_run_solver.restype = ct.c_int
+sms_model_value.argtypes = [ct.c_void_p, ct.c_int]
+sms_model_value.restype = ct.c_int
+sms_block_model.argtypes = [ct.c_void_p]
+sms_block_model.restype = None
+sms_n_vars.argtypes = [ct.c_void_p]
+sms_n_vars.restype = ct.c_int
 
 
 class Solver:
-    def __init__(self, vertices=2, clauses=[]):
-        self.sms_solver = sms_create_solver() # <2 vertices is an error
+    def __init__(self, vertices=2, cutoff=20000, clauses=[]):
+        self.sms_solver = sms_create_solver(vertices, cutoff) # <2 vertices is an error
         for clause in clauses:
             self.addClause(clause)
 
@@ -106,8 +116,24 @@ class Solver:
         pl = sms_learn_clause(self.sms_solver)
         return pl.result, pl.num_prop_lits
 
-    def solve(self, time : float): #time in seconds
+    def solve(self, time : float = -1): #time in seconds, -1 is without limit
+        """
+        runs the solver for time seconds, can be called repeatedly
+        """
         return sms_run_solver(self.sms_solver, time)
+
+    def getModel(self):
+        model = []
+        for v in range(1, sms_n_vars(self.sms_solver)+1):
+            if sms_model_value(self.sms_solver, v) == 0:
+                model.append(-v)               
+            else:
+                model.append(v)               
+        return model
+
+    def blockModel(self):
+        sms_block_model(self.sms_solver)
+
 
 
 def genPHP(n : int):
@@ -124,6 +150,17 @@ def genPHP(n : int):
 
     return PHP
 
+def edge(u, v, n):
+    return u*(2*n-1-u)//2 + v-u
+
+#triangle-free
+def genTF(n : int):
+    tfn = []
+    for u, v, w in itertools.combinations(range(n), 3):
+        tfn.append([-edge(u,v,n), -edge(u,w,n), -edge(v,w,n)])
+    return tfn
+
+
 if __name__ == "__main__":
 
     test_formulas = []
@@ -135,9 +172,11 @@ if __name__ == "__main__":
         ])
     test_formulas.append(genPHP(3))
     test_formulas.append(genPHP(11))
+    for n in range(3,11):
+        test_formulas.append(genTF(n))
     #n = int(sys.argv[1])
     t = 0
-    for F in test_formulas:
+    for F in test_formulas[:1]:
         solver = Solver()
         for C in F:
             solver.addClause(C)
@@ -165,7 +204,24 @@ if __name__ == "__main__":
         print(solver.switchAssignment([2, -3]))
         for lit in solver.getPropagatedLiterals():
             print(lit)
-
-        print(f"Solve result: {solver.solve(10.0)}")
-
         del solver
+
+    for F in test_formulas[1:3]:
+        solver = Solver()
+        for C in F:
+            solver.addClause(C)
+        print(f"Solve result: {solver.solve(0.1)}")
+        del solver
+
+    for n in range(3,11):
+        #print(test_formulas[n])
+        solver = Solver(n, 100000, test_formulas[n])
+        m = 0
+        while solver.solve() == 10:
+            m += 1
+            #print(solver.getModel())
+            solver.blockModel()
+        print (f"#triangle-free graphs on {n} vertices = {m}")
+        del solver
+
+

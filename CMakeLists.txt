@@ -30,6 +30,31 @@ find_package(ZLIB)
 include_directories(${ZLIB_INCLUDE_DIR})
 include_directories(${minisat_SOURCE_DIR})
 
+find_path(SMS_INCLUDE_DIR "sms.hpp" PATH_SUFFIXES "sms")
+include_directories("${SMS_INCLUDE_DIR}")
+
+find_library(SMS_LIBRARY_STATIC
+  NAMES sms_static
+  )
+if(NOT SMS_LIBRARY_STATIC)
+  message(FATAL_ERROR "SMS static library not found")
+else()
+  message(STATUS "Found ${SMS_LIBRARY_STATIC}")
+endif()
+add_library(sms_static STATIC IMPORTED GLOBAL)
+set_target_properties(sms_static PROPERTIES IMPORTED_LOCATION ${SMS_LIBRARY_STATIC})
+
+find_library(SMS_LIBRARY
+  NAMES sms
+  )
+if(NOT SMS_LIBRARY)
+  message(FATAL_ERROR "SMS library not found")
+else()
+  message(STATUS "Found ${SMS_LIBRARY}")
+endif()
+add_library(sms STATIC IMPORTED GLOBAL)
+set_target_properties(sms PROPERTIES IMPORTED_LOCATION ${SMS_LIBRARY})
+
 #--------------------------------------------------------------------------------------------------
 # Compile flags:
 
@@ -42,23 +67,24 @@ set(MINISAT_LIB_SOURCES
     minisat/utils/Options.cc
     minisat/utils/System.cc
     minisat/core/Solver.cc
-    minisat/simp/SimpSolver.cc)
+    minisat/simp/SimpSolver.cc
+	minisat/core/SMSPropagator.cc)
 
 add_library(minisat-lib-static STATIC ${MINISAT_LIB_SOURCES})
 add_library(minisat-lib-shared SHARED ${MINISAT_LIB_SOURCES})
 
-target_link_libraries(minisat-lib-shared ${ZLIB_LIBRARY})
-target_link_libraries(minisat-lib-static ${ZLIB_LIBRARY})
+target_link_libraries(minisat-lib-shared ${ZLIB_LIBRARY} sms)
+target_link_libraries(minisat-lib-static ${ZLIB_LIBRARY} sms_static)
 
 add_executable(minisat_core minisat/core/Main.cc)
 add_executable(minisat_simp minisat/simp/Main.cc)
 
 if(STATIC_BINARIES)
-  target_link_libraries(minisat_core minisat-lib-static)
-  target_link_libraries(minisat_simp minisat-lib-static)
+  target_link_libraries(minisat_core minisat-lib-static sms_static)
+  target_link_libraries(minisat_simp minisat-lib-static sms_static)
 else()
-  target_link_libraries(minisat_core minisat-lib-shared)
-  target_link_libraries(minisat_simp minisat-lib-shared)
+  target_link_libraries(minisat_core minisat-lib-shared sms)
+  target_link_libraries(minisat_simp minisat-lib-shared sms)
 endif()
 
 set_target_properties(minisat-lib-static PROPERTIES OUTPUT_NAME "minisat")

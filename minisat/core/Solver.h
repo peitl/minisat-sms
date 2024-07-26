@@ -27,8 +27,10 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "minisat/mtl/IntMap.h"
 #include "minisat/utils/Options.h"
 #include "minisat/core/SolverTypes.h"
+#include "minisat/core/SMSPropagator.h"
 #include <vector>
 
+#include <sms.hpp>
 
 namespace Minisat {
 
@@ -40,7 +42,7 @@ public:
 
     // Constructor/Destructor:
     //
-    Solver();
+    Solver(int vertices = 2, int cutoff = 20000);
     virtual ~Solver();
 
     // Problem specification:
@@ -210,6 +212,12 @@ public:
     int btlev = -1;
     CRef cflr = CRef_Undef;
     vec<Lit> lrncls;
+
+    SMSPropagator sms;
+    bool addClauseDuringSearch(vec<Lit> &&clause);
+
+    adjacency_matrix_t getAdjMatrix(bool from_solution = false);
+    vector<Lit> blockingClause(const forbidden_graph_t& fg);
 
     // Solver state:
     //
@@ -455,7 +463,7 @@ typedef struct AssignmentSwitchResult {
 
 extern "C" {
 
-  void* create_solver();
+  void* create_solver(int vertices, int cutoff);
   void add(void* sms_solver, int literal);
   void destroy_solver(void* sms_solver);
   PropLits assign_literal(void* solver, int literal);
@@ -465,6 +473,9 @@ extern "C" {
   int request_propagation_scope(void* solver, int level);
   int next_prop_lit(void* solver);
   int run_solver(void* solver, double secs); // -1 secs means indefinitely
+  void block_model(void* solver);
+  int model_value(void* solver, int literal);
+  int n_vars(void* solver);
 }
 
 #endif

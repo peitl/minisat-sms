@@ -23,6 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "minisat/mtl/Alg.h"
 #include "minisat/mtl/Sort.h"
+#include "minisat/utils/Options.h"
 #include "minisat/utils/System.h"
 #include "minisat/core/Solver.h"
 
@@ -51,12 +52,13 @@ static IntOption     opt_min_learnts_lim   (_cat, "min-learnts", "Minimum learnt
 //=================================================================================================
 // Constructor/Destructor:
 
-
-Solver::Solver() :
+Solver::Solver(int vertices, int cutoff) :
+    // SMS
+    sms              (this, vertices, cutoff)
 
     // Parameters (user settable):
     //
-    verbosity        (0)
+  , verbosity        (0)
   , var_decay        (opt_var_decay)
   , clause_decay     (opt_clause_decay)
   , random_var_freq  (opt_random_var_freq)
@@ -750,6 +752,7 @@ lbool Solver::search(int nof_conflicts)
             }
 
         }else{
+
             // NO CONFLICT
             if ((nof_conflicts >= 0 && conflictC >= nof_conflicts) || !withinBudget()){
                 // Reached bound on number of conflicts:
@@ -764,6 +767,13 @@ lbool Solver::search(int nof_conflicts)
             if (learnts.size()-nAssigns() >= max_learnts)
                 // Reduce the set of learnt clauses:
                 reduceDB();
+
+            // run SMS mincheck
+            int sms_min_status = sms.checkAssignment();
+            if (sms_min_status == 0)
+              continue;
+            if (sms_min_status == -1)
+              return l_False;
 
             Lit next = lit_Undef;
             while (decisionLevel() < assumptions.size()){
@@ -790,6 +800,22 @@ lbool Solver::search(int nof_conflicts)
                     // Model found:
                     return l_True;
             }
+
+            /* TODO call mincheck here
+             * 1. construct an adjacency matrix from the partial assignment
+             * 2. call mincheck
+             * 3. if not minimal:
+             *      figure out whether unit or conflict
+             *      if unit:
+             *        add symmetry clause
+             *        enqueue unit literal with the symmetry clause as reason
+             *      else:
+             *        figure out backtrack level and whether asserting
+             *        backtrack
+             *        add symmetry clause
+             *        if asserting:
+             *          enqueue unit literal with the symmetry clause as reason
+             */
 
             // Increase decision level and enqueue 'next'
             newDecisionLevel();
@@ -1072,6 +1098,8 @@ void Solver::garbageCollect()
     to.moveTo(ca);
 }
 
+// ----- SMS + step-wise controls -----
+
 int compare( const void* a, const void* b) {
    int int_a = * ( (int*) a );
    int int_b = * ( (int*) b );
@@ -1095,10 +1123,104 @@ int in(int* begin, int* end, int val) {
 	return in(begin, end, val);
 }
 
+
+// returns false if clause violated at decision level 0
+bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
+  /* 1. cancelUntil(highest dec level in clause)
+   * 2. learnts.push(...)
+   * 3. if unit, then enqueue at this dec level with the new CRef
+   * 4. if conflict, then
+   * 4a.  if only one assignment at highest dec level, then backtrack before this declevel and enqueue
+   * 4b.  if two assignments at highest dec level, then analyze at that level
+   */
+
+  // TODO this first sorts the clause so that unassigned literals come first, then by decision level
+  // this is potentially expensive and unnecessary; all that we need is that the first two places
+  // contain unassigned literals if possible, and highest decision levels otherwise, which can be computed in linear time
+  if (clause.size() == 0)
+    return false;
+
+  std::sort(&clause[0], &clause.last()+1, [this](Lit la, Lit lb){
+        if (this->value(la) == l_Undef)
+          return true;
+        if (this->value(lb) == l_Undef)
+          return false;
+        return this->level(var(la)) > this->level(var(lb));
+      });
+
+  int num_unassigned = 0;
+  while (value(clause[num_unassigned]) == l_Undef) {
+    num_unassigned++;
+  }
+
+  assert(num_unassigned <= 1);
+
+  if (num_unassigned == clause.size()) {
+    assert(num_unassigned == 1);
+    cancelUntil(0);
+    uncheckedEnqueue(clause[0]);
+    return true;
+  }
+
+  int highest_dl = level(var(clause[num_unassigned]));
+
+  if (highest_dl == 0 && num_unassigned == 0)
+    return false;
+
+  int num_highest_dl = 1;
+  while (num_unassigned + num_highest_dl < clause.size() && level(var(clause[num_unassigned + num_highest_dl])) == highest_dl) num_highest_dl++;
+
+  if (num_unassigned == 1) {
+    cancelUntil(highest_dl);
+    CRef cr = ca.alloc(clause, true);
+    learnts.push(cr);
+    attachClause(cr);
+    claBumpActivity(ca[cr]);
+    uncheckedEnqueue(clause[0], cr);
+  } else {
+    assert(num_unassigned == 0);
+    if (num_highest_dl > 1) {
+      cancelUntil(highest_dl);
+      /*for (int i = 0; i < clause.size(); i++) {
+        printf("%d(%d) ", l2i(clause[i]), level(var(clause[i])));
+      }
+      printf("\n");*/
+      CRef cr = ca.alloc(clause, true);
+      learnts.push(cr);
+      attachClause(cr);
+      claBumpActivity(ca[cr]);
+
+      vec<Lit> learnt_clause;
+      int backtrack_level;
+      analyze(cr, learnt_clause, backtrack_level);
+      cancelUntil(backtrack_level);
+      if (learnt_clause.size() == 1){
+        uncheckedEnqueue(learnt_clause[0]);
+      } else{
+        CRef cr = ca.alloc(learnt_clause, true);
+        learnts.push(cr);
+        attachClause(cr);
+        claBumpActivity(ca[cr]);
+        uncheckedEnqueue(learnt_clause[0], cr);
+      }
+    } else {
+      cancelUntil(highest_dl-1);
+      CRef cr = ca.alloc(clause, true);
+      learnts.push(cr);
+      attachClause(cr);
+      claBumpActivity(ca[cr]);
+      uncheckedEnqueue(clause[0], cr);
+    }
+  }
+  return true;
+}
+
+// ------ CTYPES API ---------
+
 extern "C" {
 
-  void* create_solver() {
-    return new(std::nothrow) Solver();
+  void* create_solver(int vertices, int cutoff) {
+    return new(std::nothrow) Solver(vertices, cutoff);
   }
 
   void destroy_solver(void* sms_solver) {
@@ -1272,6 +1394,28 @@ extern "C" {
     } else {
       return 0;
     }
+  }
+
+  int model_value(void* sms_solver, int literal) {
+	  Solver* s = (Solver*) sms_solver;
+    return s->modelValue(s->i2l(literal)) == l_True;
+  }
+
+  void block_model(void* sms_solver) {
+	  Solver* s = (Solver*) sms_solver;
+    //printf("model block ");
+    for (Var v = 0; v < s->nVars(); v++) {
+      Lit l = mkLit(v, s->modelValue(v) == l_True);
+      //printf("%d ", s->l2i(l));
+      s->tmp_clause.push(mkLit(v, s->modelValue(v) == l_True));
+    }
+    //printf("\n");
+    s->addTmpClause();
+  }
+
+  int n_vars(void* sms_solver) {
+	  Solver* s = (Solver*) sms_solver;
+    return s->nVars();
   }
 
 }
