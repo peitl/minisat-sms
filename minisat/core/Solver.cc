@@ -769,7 +769,7 @@ lbool Solver::search(int nof_conflicts)
                 reduceDB();
 
             // run SMS mincheck
-            int sms_min_status = sms.checkAssignment();
+            int sms_min_status = sms.checkAssignment(false);
             if (sms_min_status == 0)
               continue;
             if (sms_min_status == -1)
@@ -796,9 +796,18 @@ lbool Solver::search(int nof_conflicts)
                 decisions++;
                 next = pickBranchLit();
 
-                if (next == lit_Undef)
+                if (next == lit_Undef) {
                     // Model found:
+                    //
+                    // run SMS mincheck
+                    sms_min_status = sms.checkAssignment(true);
+                    if (sms_min_status == 0)
+                      continue;
+                    if (sms_min_status == -1)
+                      return l_False;
+
                     return l_True;
+                }
             }
 
             /* TODO call mincheck here
