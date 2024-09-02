@@ -1349,7 +1349,7 @@ extern "C" {
 			  literals[i] = t;
 		  }
 	  }
-	  qsort (literals, sizeof(int), length - n_unassigned, compare);
+	  qsort (literals + n_unassigned, length - n_unassigned, sizeof(int), compare);
 
 	  int btlev;
 	  for (btlev = 0; btlev < s->decisionLevel(); btlev++) {
