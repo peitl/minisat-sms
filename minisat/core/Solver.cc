@@ -234,6 +234,7 @@ bool Solver::satisfied(const Clause& c) const {
 //
 void Solver::cancelUntil(int level) {
     if (decisionLevel() > level){
+        cflr = CRef_Undef;
         for (int c = trail.size()-1; c >= trail_lim[level]; c--){
             Var      x  = var(trail[c]);
             assigns [x] = l_Undef;
@@ -1301,6 +1302,9 @@ extern "C" {
 
   PropLits assign_literal(void* sms_solver, int literal) {
     Solver* s = (Solver*) sms_solver;
+    if (s->cflr != CRef_Undef) {
+      return {CONFLICT, s->nAssigns() - s->trail_lim.last()};
+    }
     s->newDecisionLevel();
     s->uncheckedEnqueue(s->i2l(literal));
     return propagate(sms_solver);
@@ -1362,6 +1366,12 @@ extern "C" {
 
     int num_prop_lits = s->nAssigns();
     int num_decisions_executed = 0;
+
+    if (btlev == s->decisionLevel()) {
+      if (s->cflr != CRef_Undef) {
+        return {CONFLICT, num_decisions_executed, num_prop_lits};
+      }
+    }
     // this function will report the total number of propagated literals including propagations that had already been in place
 	  for (int i = 0; i < length; i++) {
 		  Lit l = s->i2l(literals[i]);
