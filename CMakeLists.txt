@@ -60,6 +60,17 @@ set_target_properties(sms PROPERTIES IMPORTED_LOCATION ${SMS_LIBRARY})
 
 add_definitions(-D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS)
 
+if(DEFINED VAR_WIDTH)
+	if(${VAR_WIDTH} EQUAL 16)
+		message("VAR_WIDTH detected")
+		add_definitions(-DVAR_WIDTH=16)
+	else()
+		message("VAR_WIDTH detected but the value ${VAR_WIDTH} is meaningless, ignoring")
+	endif()
+else()
+	message("VAR_WIDTH not detected")
+endif()
+
 #--------------------------------------------------------------------------------------------------
 # Build Targets:
 

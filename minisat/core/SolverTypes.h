@@ -23,6 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define Minisat_SolverTypes_h
 
 #include <assert.h>
+#include <cstdio>
 
 #include "minisat/mtl/Alg.h"
 #include "minisat/mtl/Vec.h"
@@ -39,7 +40,20 @@ namespace Minisat {
 // NOTE! Variables are just integers. No abstraction here. They should be chosen from 0..N,
 // so that they can be used as array indices.
 
+#ifndef VAR_WIDTH
+#define VAR_WIDTH 32
+#endif
+
+#if VAR_WIDTH == 16
+typedef int16_t Var;
+typedef uint16_t Activity;
+typedef uint16_t Abstraction;
+#else
 typedef int Var;
+typedef float Activity;
+typedef uint32_t Abstraction;
+#endif
+
 #if defined(MINISAT_CONSTANTS_AS_MACROS)
 #define var_Undef (-1)
 #else
@@ -48,7 +62,7 @@ typedef int Var;
 
 
 struct Lit {
-    int     x;
+    Var     x; // TODO maybe we want Var to be unsigned and Lit to be signed?
 
     // Use this as a constructor:
     friend Lit mkLit(Var var, bool sign);
@@ -59,16 +73,16 @@ struct Lit {
 };
 
 
-inline  Lit  mkLit     (Var var, bool sign = false) { Lit p; p.x = var + var + (int)sign; return p; }
+inline  Lit  mkLit     (Var var, bool sign = false) { Lit p; p.x = var + var + (Var)sign; return p; }
 inline  Lit  operator ~(Lit p)              { Lit q; q.x = p.x ^ 1; return q; }
-inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned int)b; return q; }
+inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned short)b; return q; }
 inline  bool sign      (Lit p)              { return p.x & 1; }
-inline  int  var       (Lit p)              { return p.x >> 1; }
+inline  Var  var       (Lit p)              { return p.x >> 1; }
 
 // Mapping Literals to and from compact integers suitable for array indexing:
-inline  int  toInt     (Var v)              { return v; } 
-inline  int  toInt     (Lit p)              { return p.x; } 
-inline  Lit  toLit     (int i)              { Lit p; p.x = i; return p; } 
+inline  Var  toInt     (Var v)              { return v; } 
+inline  Var  toInt     (Lit p)              { return p.x; } 
+inline  Lit  toLit     (Var i)              { Lit p; p.x = i; return p; } 
 
 //const Lit lit_Undef = mkLit(var_Undef, false);  // }- Useful special constants.
 //const Lit lit_Error = mkLit(var_Undef, true );  // }
@@ -143,7 +157,9 @@ class Clause {
         unsigned has_extra : 1;
         unsigned reloced   : 1;
         unsigned size      : 27; }                        header;
-    union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
+    // TODO the union doesn't work if we want 2-byte variables
+    //
+    union { Lit lit; Activity act; Abstraction abs; } data[0];
 
     friend class ClauseAllocator;
 
@@ -185,9 +201,9 @@ class Clause {
 public:
     void calcAbstraction() {
         assert(header.has_extra);
-        uint32_t abstraction = 0;
+        Abstraction abstraction = 0;
         for (int i = 0; i < size(); i++)
-            abstraction |= 1 << (var(data[i].lit) & 31);
+            abstraction |= 1 << (var(data[i].lit) & (VAR_WIDTH-1));
         data[header.size].abs = abstraction;  }
 
 
@@ -201,8 +217,8 @@ public:
     const Lit&   last        ()      const   { return data[header.size-1].lit; }
 
     bool         reloced     ()      const   { return header.reloced; }
-    CRef         relocation  ()      const   { return data[0].rel; }
-    void         relocate    (CRef c)        { header.reloced = 1; data[0].rel = c; }
+    CRef         relocation  ()      const   { return * (CRef*) &data[0]; }
+    void         relocate    (CRef c)        { header.reloced = 1; * (CRef*) &data[0] = c; }
 
     // NOTE: somewhat unsafe to change the clause in-place! Must manually call 'calcAbstraction' afterwards for
     //       subsumption operations to behave correctly.
@@ -210,8 +226,8 @@ public:
     Lit          operator [] (int i) const   { return data[i].lit; }
     operator const Lit* (void) const         { return (Lit*)data; }
 
-    float&       activity    ()              { assert(header.has_extra); return data[header.size].act; }
-    uint32_t     abstraction () const        { assert(header.has_extra); return data[header.size].abs; }
+    Activity&    activity    ()              { assert(header.has_extra); return data[header.size].act; }
+    Abstraction  abstraction () const        { assert(header.has_extra); return data[header.size].abs; }
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
@@ -227,7 +243,10 @@ class ClauseAllocator
     RegionAllocator<uint32_t> ra;
 
     static uint32_t clauseWord32Size(int size, bool has_extra){
-        return (sizeof(Clause) + (sizeof(Lit) * (size + (int)has_extra))) / sizeof(uint32_t); }
+        uint32_t csz = (sizeof(Clause) + (sizeof(Lit) * (size + (int)has_extra)) + (sizeof(uint32_t)-1)) / sizeof(uint32_t);
+        //printf("A clause with %d literals and has_extra=%d has 32-bit size %u\n", size, has_extra, csz);
+        return csz;
+    }
 
  public:
     enum { Unit_Size = RegionAllocator<uint32_t>::Unit_Size };
@@ -241,10 +260,11 @@ class ClauseAllocator
         to.extra_clause_field = extra_clause_field;
         ra.moveTo(to.ra); }
 
+    // TODO fix the allocations so that if variables are 2-byte, allocate half the memory
     CRef alloc(const vec<Lit>& ps, bool learnt = false)
     {
-        assert(sizeof(Lit)      == sizeof(uint32_t));
-        assert(sizeof(float)    == sizeof(uint32_t));
+        /*assert(sizeof(Lit)      == sizeof(uint32_t));
+        assert(sizeof(float)    == sizeof(uint32_t));*/
         bool use_extra = learnt | extra_clause_field;
         CRef cid       = ra.alloc(clauseWord32Size(ps.size(), use_extra));
         new (lea(cid)) Clause(ps, use_extra, learnt);

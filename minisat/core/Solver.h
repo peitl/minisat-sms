@@ -23,12 +23,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "minisat/mtl/Vec.h"
 #include "minisat/mtl/Heap.h"
-#include "minisat/mtl/Alg.h"
 #include "minisat/mtl/IntMap.h"
-#include "minisat/utils/Options.h"
 #include "minisat/core/SolverTypes.h"
 #include "minisat/core/SMSPropagator.h"
-#include <vector>
 
 #include <sms.hpp>
 
@@ -147,7 +144,6 @@ public:
     //
     int       verbosity;
     double    var_decay;
-    double    clause_decay;
     double    random_var_freq;
     double    random_seed;
     bool      luby_restart;
@@ -239,7 +235,13 @@ public:
     Heap<Var,VarOrderLt>order_heap;       // A priority queue of variables ordered with respect to the variable activity.
 
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
+#if VAR_WIDTH == 16
+    Activity            cla_inc;          // Amount to bump next clause with.
+    Activity            clause_decay;
+#else
     double              cla_inc;          // Amount to bump next clause with.
+    double              clause_decay; 
+#endif
     double              var_inc;          // Amount to bump next variable with.
     int                 qhead;            // Head of queue (as index into the trail -- no more explicit propagation queue in MiniSat).
     int                 simpDB_assigns;   // Number of top-level assignments since last execution of 'simplify()'.
@@ -354,6 +356,23 @@ inline void Solver::varBumpActivity(Var v, double inc) {
     if (order_heap.inHeap(v))
         order_heap.decrease(v); }
 
+#if VAR_WIDTH == 16
+inline void Solver::claDecayActivity() {}
+inline void Solver::claBumpActivity (Clause& c) {
+        if ( (c.activity() += cla_inc) > 1 << 15 ) {
+            // Rescale:
+            printf("rescaling clause activity\n");
+            for (int i = 0; i < learnts.size(); i++) {
+                Activity a = ca[learnts[i]].activity();
+                unsigned char log_a = 0;
+                while (a >>= 1) { log_a++; }
+                ca[learnts[i]].activity() >>= (log_a/2); // approx sqrt
+                //ca[learnts[i]].activity() /= 4;
+            }
+            //cla_inc = 1;
+        }
+}
+#else
 inline void Solver::claDecayActivity() { cla_inc *= (1 / clause_decay); }
 inline void Solver::claBumpActivity (Clause& c) {
         if ( (c.activity() += cla_inc) > 1e20 ) {
@@ -361,6 +380,7 @@ inline void Solver::claBumpActivity (Clause& c) {
             for (int i = 0; i < learnts.size(); i++)
                 ca[learnts[i]].activity() *= 1e-20;
             cla_inc *= 1e-20; } }
+#endif
 
 inline void Solver::checkGarbage(void){ return checkGarbage(garbage_frac); }
 inline void Solver::checkGarbage(double gf){
