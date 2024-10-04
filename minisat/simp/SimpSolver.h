@@ -34,7 +34,7 @@ class SimpSolver : public Solver {
  public:
     // Constructor/Destructor:
     //
-    SimpSolver();
+    SimpSolver(int vertices = 2, int cutoff = 20000);
     ~SimpSolver();
 
     // Problem specification:

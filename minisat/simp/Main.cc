@@ -67,9 +67,13 @@ int main(int argc, char** argv)
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", 0, IntRange(0, INT32_MAX));
         BoolOption   strictp("MAIN", "strict", "Validate DIMACS header during parsing.", false);
 
+        // SMS options:
+        //
+        IntOption    vertices("SMS", "vertices","Number of vertices for SMS.", 2, IntRange(2, 1 << (sizeof(Var)*4)));
+
         parseOptions(argc, argv, true);
         
-        SimpSolver  S;
+        SimpSolver  S(vertices);
         double      initial_time = cpuTime();
 
         if (!pre) S.eliminate(true);

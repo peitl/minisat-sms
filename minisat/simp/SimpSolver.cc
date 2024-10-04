@@ -18,9 +18,8 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#include "minisat/mtl/Sort.h"
 #include "minisat/simp/SimpSolver.h"
-#include "minisat/utils/System.h"
+#include "minisat/utils/Options.h"
 
 using namespace Minisat;
 
@@ -43,8 +42,8 @@ static DoubleOption opt_simp_garbage_frac(_cat, "simp-gc-frac", "The fraction of
 // Constructor/Destructor:
 
 
-SimpSolver::SimpSolver() :
-    grow               (opt_grow)
+SimpSolver::SimpSolver(int vertices, int cutoff) : Solver(vertices, cutoff)
+  , grow               (opt_grow)
   , clause_lim         (opt_clause_lim)
   , subsumption_lim    (opt_subsumption_lim)
   , simp_garbage_frac  (opt_simp_garbage_frac)
