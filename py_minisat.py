@@ -24,6 +24,9 @@ class AssignmentSwitchResult(ct.Structure):
                 ('num_decisions_executed', ct.c_int),
                 ('num_prop_lits', ct.c_int)]
 
+class Lit(ct.Structure):
+    _fields_ = [('x', ct.c_int)]
+
 # load functions into aliases
 sms_create_solver = smslib.create_solver
 sms_add = smslib.add
@@ -38,6 +41,7 @@ sms_run_solver = smslib.run_solver
 sms_model_value = smslib.model_value
 sms_block_model = smslib.block_model
 sms_n_vars = smslib.n_vars
+sms_trail_location = smslib.trail_location
 
 # specify function signatures
 sms_create_solver.argtypes = []
@@ -68,6 +72,13 @@ sms_block_model.argtypes = [ct.c_void_p]
 sms_block_model.restype = None
 sms_n_vars.argtypes = [ct.c_void_p]
 sms_n_vars.restype = ct.c_int
+sms_trail_location.argtypes = [ct.c_void_p, ct.c_int]
+sms_trail_location.restype = ct.POINTER(Lit)
+
+def l2i(x : int):
+    s = 1 - (x % 2) * 2;
+    v = x // 2 + 1;
+    return v * s
 
 
 class Solver:
@@ -108,6 +119,19 @@ class Solver:
                 yield lit
             else:
                 break
+
+    # collect num propagated literals from the solver (caller needs to know how many)
+    def getPropagatedLiteralsFast(self, num : int, sinceLevel=0):
+        tloc : ct.POINTER(Lit) = sms_trail_location(self.sms_solver, sinceLevel)
+        if not tloc:
+            raise IndexError(sinceLevel)
+
+        for i in range(num):
+            x = tloc[i].x # dereference tloc, then take .x member
+            v = x // 2 + 1
+            yield v if x % 2 == 0 else -v
+            #yield l2i(x)
+
 
     def backtrack(self, levels:int = 1):
         return sms_backtrack(self.sms_solver, levels)

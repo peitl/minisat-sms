@@ -1280,6 +1280,17 @@ extern "C" {
     return 1;
   }
 
+  Lit* trail_location(void* sms_solver, int level) {
+    Solver* s = (Solver*) sms_solver;
+    if (level == 0) {
+      return &s->trail[0];
+    } else if (level < 0 || level > s->decisionLevel()) {
+      return NULL;
+    } else {
+      return &s->trail[s->trail_lim[level-1]];
+    }
+  }
+
   int next_prop_lit(void* sms_solver) {
     Solver* s = (Solver*) sms_solver;
     if (s->literator >= 0 && s->literator < s->trail.size()) {
