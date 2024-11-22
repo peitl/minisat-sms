@@ -23,12 +23,9 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "minisat/mtl/Vec.h"
 #include "minisat/mtl/Heap.h"
-#include "minisat/mtl/Alg.h"
 #include "minisat/mtl/IntMap.h"
-#include "minisat/utils/Options.h"
 #include "minisat/core/SolverTypes.h"
 #include "minisat/core/SMSPropagator.h"
-#include <vector>
 
 #include <sms.hpp>
 
@@ -214,10 +211,15 @@ public:
     vec<Lit> lrncls;
 
     SMSPropagator sms;
+
     bool addClauseDuringSearch(vec<Lit> &&clause);
 
     adjacency_matrix_t getAdjMatrix(bool from_solution = false);
     vector<Lit> blockingClause(const forbidden_graph_t& fg);
+
+    // TODO improve memory footprint
+    vector<vector<Lit>> solution_store;
+    int num_sol = 0;
 
     // Solver state:
     //
@@ -450,6 +452,12 @@ OPEN = 0,
 SAT = 1
 };
 
+enum SolutionResult {
+  TIME = 0, // out of time
+  DONE = 1, // finished normally
+  LIMIT = 2 // reached some other limit
+};
+
 typedef struct PropLits {
 PropResult result; // -1, 0, 1
 int num_prop_lits;
@@ -461,9 +469,15 @@ typedef struct AssignmentSwitchResult {
   int num_prop_lits;
 } AssignmentSwitchResult;
 
+typedef struct EnumerationResult {
+  int num_sol;
+  SolutionResult status;
+} EnumerationResult;
+
 extern "C" {
 
   void* create_solver(int vertices, int cutoff);
+  void attach_010_propagator(void* sms_solver, int triangleVars);
   void add(void* sms_solver, int literal);
   void destroy_solver(void* sms_solver);
   PropLits assign_literal(void* solver, int literal);

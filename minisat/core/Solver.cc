@@ -690,7 +690,6 @@ bool Solver::simplify()
     return true;
 }
 
-
 /*_________________________________________________________________________________________________
 |
 |  search : (nof_conflicts : int) (params : const SearchParams&)  ->  [lbool]
@@ -1233,6 +1232,11 @@ extern "C" {
     return new(std::nothrow) Solver(vertices, cutoff);
   }
 
+  void attach_010_propagator(void* sms_solver, int triangleVars) {
+    Solver* s = (Solver*) sms_solver;
+    s->sms.prepare010(triangleVars);
+  }
+
   void destroy_solver(void* sms_solver) {
     delete (Solver*) sms_solver;
   }
@@ -1424,6 +1428,43 @@ extern "C" {
     } else {
       return 0;
     }
+  }
+
+  EnumerationResult run_solver_enumerate(void* sms_solver, double secs, bool store_solutions = true, int max_sol = INT32_MAX) {
+	  Solver* s = (Solver*) sms_solver;
+    s->time_budget = secs;
+    lbool result = l_Undef;
+    while (result != l_False) {
+      result = s->solve_();
+      if (result == l_True) {
+        int n = s->sms.config.vertices;
+        int m = n*(n-1)/2;
+        s->num_sol++;
+
+        vec<Lit> blocking_clause(m);
+        for (Var v = 0; v < m; v++) {
+          blocking_clause.push(mkLit(v, s->modelValue(v) == l_True));
+        }
+        if (store_solutions) {
+          s->solution_store.push_back(vector<Lit>(m));
+          for (int i = 0; i < blocking_clause.size(); i++) {
+            s->solution_store.back().push_back(~blocking_clause[i]);
+          }
+        }
+
+        s->addClause(blocking_clause);
+        if (s->num_sol >= max_sol) {
+          return {s->num_sol, LIMIT};
+        }
+      } else if (result == l_Undef) {
+        // time's up
+        return {s->num_sol, TIME};
+      }
+    }
+
+    s->sms.printStats();
+
+    return {s->num_sol, DONE};
   }
 
   int model_value(void* sms_solver, int literal) {

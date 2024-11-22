@@ -14,22 +14,57 @@ std::vector<std::vector<int>> makeDefaultOrderingVector(int vertices) {
 SMSPropagator::SMSPropagator(Solver* solver, int vertices, int cutoff) :
   solver(solver),
   config(vertices, cutoff),
-  checker(30, config.initialPartition, makeDefaultOrderingVector(vertices), config.cutoff, NULL)
+  checker(30, config.initialPartition, makeDefaultOrderingVector(vertices), config.cutoff, NULL),
+  checker010(config.triangles, config.edges, &triangle_stats, &edge_stats)
 {}
 
 //  0 means non-minimal, clause added successfully
 //  1 means     minimal
 // -1 means non-minimal, clause violated at decision level 0, formula UNSAT
 int SMSPropagator::checkAssignment(bool is_full_assignment) {
+  adjacency_matrix_t matrix = getAdjMatrix();
   try {
-    checker.check(getAdjMatrix(), is_full_assignment);
+    checker.check(matrix, is_full_assignment);
   } catch (forbidden_graph_t fg) {
     if (!solver->addClauseDuringSearch(blockingClause(fg)))
-      return -1;
-    return 0;
+      return -1; // UNSAT
+    return 0; // symmetry clause learned
+  }
+  if (is_full_assignment && prop010) {
+    try {
+      checker010.check(matrix, vector<int>(), config.nextFreeVariable);
+    } catch (vector<clause_t> clauses) {
+      /*if (general_purpose_counter % 10 == 0) {
+        if (general_purpose_counter % 100 == 0)
+          printf("\n## %d ##", general_purpose_counter);
+        printf("\n010 clause hashes: ");
+      }
+      general_purpose_counter++;*/
+      for (clause_t& clause : clauses) {
+        /*int hash = 0;
+        for (int lit : clause) {
+          hash += lit;
+        }
+        printf("% 7d ", hash);*/
+        if (!solver->addClauseDuringSearch(blockingClause(clause))) {
+          return -1;
+        }
+        return 0;
+      }
+    }
   }
   //printf("SMS check passed\n");
   return 1;
+}
+
+
+vec<Lit> SMSPropagator::blockingClause(const clause_t& clause) {
+    vec<Lit> lcls(clause.size());
+    for (int lit : clause) {
+      //lcls.push(mkLit(abs(lit), lit < 0));
+      lcls.push(solver->i2l(lit));
+    }
+    return lcls;
 }
 
 

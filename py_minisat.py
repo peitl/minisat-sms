@@ -15,6 +15,12 @@ STATUS = {
          1 : "SAT",
         }
 
+SOLUTION_RESULT = {
+        0 : "TIME",
+        1 : "DONE",
+        2 : "LIMIT",
+        }
+
 class PropLits(ct.Structure):
     _fields_ = [('result', ct.c_int),
                 ('num_prop_lits', ct.c_int)]
@@ -27,6 +33,10 @@ class AssignmentSwitchResult(ct.Structure):
 class Lit(ct.Structure):
     _fields_ = [('x', ct.c_int)]
 
+class EnumerationResult(ct.Structure):
+    _fields_ = [('num_sol', ct.c_int),
+                ('status', ct.c_int)]
+
 # load functions into aliases
 sms_create_solver = smslib.create_solver
 sms_add = smslib.add
@@ -38,10 +48,12 @@ sms_request_propagation_scope = smslib.request_propagation_scope
 sms_fast_switch_assignment = smslib.fast_switch_assignment
 sms_learn_clause = smslib.learn_clause
 sms_run_solver = smslib.run_solver
+sms_run_solver_enumerate = smslib.run_solver_enumerate
 sms_model_value = smslib.model_value
 sms_block_model = smslib.block_model
 sms_n_vars = smslib.n_vars
 sms_trail_location = smslib.trail_location
+sms_attach_010_propagator = smslib.attach_010_propagator
 
 # specify function signatures
 sms_create_solver.argtypes = []
@@ -66,6 +78,8 @@ sms_learn_clause.argtypes = [ct.c_void_p]
 sms_learn_clause.restype = PropLits
 sms_run_solver.argtypes = [ct.c_void_p, ct.c_double]
 sms_run_solver.restype = ct.c_int
+sms_run_solver_enumerate.argtypes = [ct.c_void_p, ct.c_double, ct.c_bool, ct.c_int]
+sms_run_solver_enumerate.restype = EnumerationResult
 sms_model_value.argtypes = [ct.c_void_p, ct.c_int]
 sms_model_value.restype = ct.c_int
 sms_block_model.argtypes = [ct.c_void_p]
@@ -74,6 +88,8 @@ sms_n_vars.argtypes = [ct.c_void_p]
 sms_n_vars.restype = ct.c_int
 sms_trail_location.argtypes = [ct.c_void_p, ct.c_int]
 sms_trail_location.restype = ct.POINTER(Lit)
+sms_attach_010_propagator.argtypes = [ct.c_void_p, ct.c_int]
+sms_attach_010_propagator.restype = None
 
 def l2i(x : int):
     s = 1 - (x % 2) * 2;
@@ -82,8 +98,12 @@ def l2i(x : int):
 
 
 class Solver:
-    def __init__(self, vertices=2, cutoff=20000, clauses=[]):
+    def __init__(self, vertices=2, cutoff=20000, non010=False, triangleVars=None, clauses=[]):
         self.sms_solver = sms_create_solver(vertices, cutoff) # <2 vertices is an error
+        if non010:
+            if triangleVars == None:
+                triangleVars = vertices*(vertices-1)//2+1
+            sms_attach_010_propagator(self.sms_solver, triangleVars)
         for clause in clauses:
             self.addClause(clause)
 
@@ -145,6 +165,19 @@ class Solver:
         runs the solver for time seconds, can be called repeatedly
         """
         return sms_run_solver(self.sms_solver, time)
+
+    def enumerate(self, time : float = -1, max_sol = None):
+        """
+        runs the solver for time seconds,
+        enumerates all solutions
+        returns solution count or -1 if timeout
+        """
+        if max_sol != None:
+            result = sms_run_solver_enumerate(self.sms_solver, time, True, max_sol)
+        else:
+            result = sms_run_solver_enumerate(self.sms_solver, time, True)
+        return result.num_sol, result.status
+
 
     def getModel(self):
         model = []

@@ -55,6 +55,15 @@ endif()
 add_library(sms STATIC IMPORTED GLOBAL)
 set_target_properties(sms PROPERTIES IMPORTED_LOCATION ${SMS_LIBRARY})
 
+find_library(CADICAL_LIBRARY NAMES cadical)
+if(NOT CADICAL_LIBRARY)
+  message(FATAL_ERROR "Cadical library not found")
+else()
+  message(STATUS "Found ${CADICAL_LIBRARY}")
+endif()
+add_library(cadical STATIC IMPORTED GLOBAL)
+set_target_properties(cadical PROPERTIES IMPORTED_LOCATION ${CADICAL_LIBRARY})
+
 #--------------------------------------------------------------------------------------------------
 # Compile flags:
 
@@ -69,6 +78,8 @@ set(MINISAT_LIB_SOURCES
     minisat/core/Solver.cc
     minisat/simp/SimpSolver.cc
 	minisat/core/SMSPropagator.cc)
+
+link_libraries(cadical)
 
 add_library(minisat-lib-static STATIC ${MINISAT_LIB_SOURCES})
 add_library(minisat-lib-shared SHARED ${MINISAT_LIB_SOURCES})
