@@ -1462,8 +1462,6 @@ extern "C" {
       }
     }
 
-    s->sms.printStats();
-
     return {s->num_sol, DONE};
   }
 
