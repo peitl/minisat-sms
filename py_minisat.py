@@ -172,10 +172,9 @@ class Solver:
         enumerates all solutions
         returns solution count or -1 if timeout
         """
-        if max_sol != None:
-            result = sms_run_solver_enumerate(self.sms_solver, time, True, max_sol)
-        else:
-            result = sms_run_solver_enumerate(self.sms_solver, time, True)
+        if max_sol == None:
+            max_sol = 2**31-1
+        result = sms_run_solver_enumerate(self.sms_solver, time, True, max_sol)
         return result.num_sol, result.status
 
 
