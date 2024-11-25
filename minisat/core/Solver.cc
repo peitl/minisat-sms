@@ -769,7 +769,15 @@ lbool Solver::search(int nof_conflicts)
                 reduceDB();
 
             // run SMS mincheck
-            int sms_min_status = sms.checkAssignment(false);
+            int m = sms.config.vertices * (sms.config.vertices-1) / 2;
+            bool is_full_graph = true;
+            for (Var v = 0; v < m; v++) {
+              if (value(v) == l_Undef) {
+                is_full_graph = false;
+                break;
+              }
+            }
+            int sms_min_status = sms.checkAssignment(is_full_graph);
             if (sms_min_status == 0)
               continue;
             if (sms_min_status == -1)
@@ -798,13 +806,13 @@ lbool Solver::search(int nof_conflicts)
 
                 if (next == lit_Undef) {
                     // Model found:
-                    //
-                    // run SMS mincheck
+                    /*//
+                    // run SMS mincheck (should be unnecessary, if we correctly identify full graphs above)
                     sms_min_status = sms.checkAssignment(true);
                     if (sms_min_status == 0)
                       continue;
                     if (sms_min_status == -1)
-                      return l_False;
+                      return l_False;*/
 
                     return l_True;
                 }
@@ -1157,8 +1165,53 @@ bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
         return this->level(var(la)) > this->level(var(lb));
       });
 
+  // Warning: Code below is incomplete, doesn't look for second highest decision level
+  /*int maxdl = -1;
+  if (clause.size() > 1) {
+    int i = 0, j = 0;
+    while (i < clause.size()) {
+      if (value(clause[i]) == l_Undef) {
+        Lit l = clause[j];
+        clause[j++] = clause[i];
+        clause[i++] = l;
+      } else {
+        if (level(var(clause[i])) > maxdl) {
+          maxdl = level(var(clause[i]));
+        }
+        i++;
+      }
+    }
+    if (j < 2) {
+      for (i = j; i < clause.size(); i++) {
+        if (level(var(clause[i])) == maxdl) {
+          Lit l = clause[j];
+          clause[j++] = clause[i];
+          clause[i] = l;
+          if (j == 2) {
+            break;
+          }
+        }
+      }
+    }
+  }*/
+
+  // Debug code to check that clause is sorted
+  /*for (int i = 1; i < clause.size(); i++) {
+    if (value(clause[i-1]) != l_Undef &&
+          (value(clause[i]) == l_Undef || level(var(clause[i])) > level(var(clause[i-1])))
+        ) {
+      printf("ERROR at pos %d: %d has level %d, predecessor %d has level %d\n", i, l2i(clause[i]), level(var(clause[i])), l2i(clause[i-1]), level(var(clause[i-1])));
+    }
+  }*/
+
+  //printf("  sorted clause:");
+  /*for (int i = 0; i < clause.size(); i++) {
+    printf(" %d", l2i(clause[i]));
+  }
+  printf("\n");*/
+
   int num_unassigned = 0;
-  while (value(clause[num_unassigned]) == l_Undef) {
+  while (num_unassigned < clause.size() && value(clause[num_unassigned]) == l_Undef) {
     num_unassigned++;
   }
 
@@ -1181,23 +1234,17 @@ bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
 
   if (num_unassigned == 1) {
     cancelUntil(highest_dl);
-    CRef cr = ca.alloc(clause, true);
-    learnts.push(cr);
+    CRef cr = ca.alloc(clause, false);
+    clauses.push(cr);
     attachClause(cr);
-    claBumpActivity(ca[cr]);
     uncheckedEnqueue(clause[0], cr);
   } else {
     assert(num_unassigned == 0);
     if (num_highest_dl > 1) {
       cancelUntil(highest_dl);
-      /*for (int i = 0; i < clause.size(); i++) {
-        printf("%d(%d) ", l2i(clause[i]), level(var(clause[i])));
-      }
-      printf("\n");*/
-      CRef cr = ca.alloc(clause, true);
-      learnts.push(cr);
+      CRef cr = ca.alloc(clause, false);
+      clauses.push(cr);
       attachClause(cr);
-      claBumpActivity(ca[cr]);
 
       vec<Lit> learnt_clause;
       int backtrack_level;
@@ -1213,12 +1260,18 @@ bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
         uncheckedEnqueue(learnt_clause[0], cr);
       }
     } else {
-      cancelUntil(highest_dl-1);
-      CRef cr = ca.alloc(clause, true);
-      learnts.push(cr);
-      attachClause(cr);
-      claBumpActivity(ca[cr]);
-      uncheckedEnqueue(clause[0], cr);
+      // clause to be added is already asserting (after appropriate backtrack)
+      if (clause.size() > 1) {
+        int second_highest_dl = level(var(clause[1]));
+        cancelUntil(second_highest_dl);
+        CRef cr = ca.alloc(clause, false);
+        clauses.push(cr);
+        attachClause(cr);
+        uncheckedEnqueue(clause[0], cr);
+      } else {
+        cancelUntil(0);
+        uncheckedEnqueue(clause[0]);
+      }
     }
   }
   return true;

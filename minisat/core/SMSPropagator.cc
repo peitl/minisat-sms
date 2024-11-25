@@ -53,6 +53,29 @@ int SMSPropagator::checkAssignment(bool is_full_assignment) {
       }
     }
   }
+  if (config.assignmentCutoffPrerunTime && solver->solve_time > config.assignmentCutoffPrerunTime) {
+    int m = config.vertices * (config.vertices - 1) / 2;
+    int num_assigned_edge_variables = 0;
+    vec<Lit> blocking_clause;
+    for (Var v = 0; v < m; v++) {
+      if (solver->value(v) != l_Undef) {
+        num_assigned_edge_variables++;
+        blocking_clause.push(mkLit(v, solver->value(v) == l_True));
+      }
+    }
+    if (num_assigned_edge_variables >= config.assignmentCutoff) {
+      //general_purpose_counter++;
+      printf("a");
+      for (int i = 0; i < blocking_clause.size(); i++) {
+        printf(" %d", solver->l2i(~blocking_clause[i]));
+      }
+      printf("\n");
+      //printf("adding cube clause\n");
+      if (!solver->addClauseDuringSearch(std::move(blocking_clause)))
+        return -1; // UNSAT
+      return 0; // cube blocker added
+    }
+  }
   //printf("SMS check passed\n");
   return 1;
 }
@@ -60,9 +83,9 @@ int SMSPropagator::checkAssignment(bool is_full_assignment) {
 
 vec<Lit> SMSPropagator::blockingClause(const clause_t& clause) {
     vec<Lit> lcls(clause.size());
-    for (int lit : clause) {
+    for (int i = 0; i < clause.size(); i++) {
       //lcls.push(mkLit(abs(lit), lit < 0));
-      lcls.push(solver->i2l(lit));
+      lcls[i] = solver->i2l(clause[i]);
     }
     return lcls;
 }
