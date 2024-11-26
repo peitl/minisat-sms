@@ -52,9 +52,9 @@ static IntOption     opt_min_learnts_lim   (_cat, "min-learnts", "Minimum learnt
 //=================================================================================================
 // Constructor/Destructor:
 
-Solver::Solver(int vertices, int cutoff) :
+Solver::Solver(int vertices, int cutoff, int frequency, long assignmentCutoffPrerunTime, int assignmentCutoff) :
     // SMS
-    sms              (this, vertices, cutoff)
+    sms              (this, vertices, cutoff, frequency, assignmentCutoffPrerunTime, assignmentCutoff)
 
     // Parameters (user settable):
     //
@@ -1281,8 +1281,8 @@ bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
 
 extern "C" {
 
-  void* create_solver(int vertices, int cutoff) {
-    return new(std::nothrow) Solver(vertices, cutoff);
+  void* create_solver(int vertices, int cutoff, int frequency, long assignmentCutoffPrerunTime, int assignmentCutoff) {
+    return new(std::nothrow) Solver(vertices, cutoff, frequency, assignmentCutoffPrerunTime, assignmentCutoff);
   }
 
   void attach_010_propagator(void* sms_solver, int triangleVars) {

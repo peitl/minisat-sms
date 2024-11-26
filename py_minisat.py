@@ -98,8 +98,8 @@ def l2i(x : int):
 
 
 class Solver:
-    def __init__(self, vertices=2, cutoff=20000, non010=False, triangleVars=None, clauses=[]):
-        self.sms_solver = sms_create_solver(vertices, cutoff) # <2 vertices is an error
+    def __init__(self, vertices=2, cutoff=20000, frequency=30, assignmentCutoffPrerunTime=0, assignmentCutoff=0, non010=False, triangleVars=None, clauses=[]):
+        self.sms_solver = sms_create_solver(vertices, cutoff, frequency, assignmentCutoffPrerunTime, assignmentCutoff) # <2 vertices is an error
         if non010:
             if triangleVars == None:
                 triangleVars = vertices*(vertices-1)//2+1

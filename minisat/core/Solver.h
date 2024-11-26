@@ -39,7 +39,7 @@ public:
 
     // Constructor/Destructor:
     //
-    Solver(int vertices = 2, int cutoff = 20000);
+    Solver(int vertices = 2, int cutoff = 20000, int frequency = 30, long assignmentCutoffPrerunTime = 0, int assignmentCutoff = 0);
     virtual ~Solver();
 
     // Problem specification:
@@ -476,7 +476,7 @@ typedef struct EnumerationResult {
 
 extern "C" {
 
-  void* create_solver(int vertices, int cutoff);
+  void* create_solver(int vertices, int cutoff, int frequency, long assignmentCutoffPrerunTime, int assignmentCutoff);
   void attach_010_propagator(void* sms_solver, int triangleVars);
   void add(void* sms_solver, int literal);
   void destroy_solver(void* sms_solver);
@@ -490,6 +490,10 @@ extern "C" {
   void block_model(void* solver);
   int model_value(void* solver, int literal);
   int n_vars(void* solver);
+  void print_stats(void* solver);
+  Minisat::Lit* trail_location(void* sms_solver, int level);
+  int* solution_pointer(void* solver, int i);
+  int* solution_size(void* solver, int i);
 }
 
 #endif

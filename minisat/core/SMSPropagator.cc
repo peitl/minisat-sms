@@ -11,12 +11,16 @@ std::vector<std::vector<int>> makeDefaultOrderingVector(int vertices) {
   return initialVertexOrderings;
 }
 
-SMSPropagator::SMSPropagator(Solver* solver, int vertices, int cutoff) :
+SMSPropagator::SMSPropagator(Solver* solver, int vertices, int cutoff, int frequency,
+    long assignmentCutoffPrerunTime, int assignmentCutoff) :
   solver(solver),
   config(vertices, cutoff),
-  checker(30, config.initialPartition, makeDefaultOrderingVector(vertices), config.cutoff, NULL),
+  checker(frequency, config.initialPartition, makeDefaultOrderingVector(vertices), config.cutoff, NULL),
   checker010(config.triangles, config.edges, &triangle_stats, &edge_stats)
-{}
+{
+  config.assignmentCutoffPrerunTime = assignmentCutoffPrerunTime;
+  config.assignmentCutoff = assignmentCutoff;
+}
 
 //  0 means non-minimal, clause added successfully
 //  1 means     minimal

@@ -11,7 +11,7 @@ class Solver;
 
 class SMSPropagator {
   public:
-    SMSPropagator(Solver* solver, int vertices, int cutoff);
+    SMSPropagator(Solver* solver, int vertices, int cutoff, int frequency, long assignmentCutoffPrerunTime, int assignmentCutoff);
     int checkAssignment(bool);
     void printStats() { checker.printStats(); checker010.printStats(); };
     Solver* solver;
