@@ -66,10 +66,21 @@ int main(int argc, char** argv)
         // SMS options:
         //
         IntOption    vertices("SMS", "vertices","Number of vertices for SMS.", 2, IntRange(2, 1 << (sizeof(Var)*4)));
+        IntOption    cutoff("SMS", "cutoff","SMS mincheck cutoff.", 20000, IntRange(0, 1 << (sizeof(Var)*4)));
+        IntOption    frequency("SMS", "frequency","SMS mincheck frequency.", 30, IntRange(1, 1 << (sizeof(Var)*4)));
+        IntOption    acpt("SMS", "acpt","SMS assignment cutoff prerun time.", 0, IntRange(2, 1 << (sizeof(Var)*4)));
+        IntOption    ac("SMS", "ac","SMS assignment cutoff.", 0, IntRange(2, 1 << (sizeof(Var)*4)));
+        BoolOption   non010("SMS", "non010", "SMS Kochen-Specker non010-colorable.", false);
+        IntOption    triangle_vars("SMS", "triangle-vars","SMS Kochen-Specker first triangle variable.", 0, IntRange(0, 1 << (sizeof(Var)*4)));
         
         parseOptions(argc, argv, true);
 
-        Solver S(vertices);
+        Solver S(vertices, cutoff, frequency, acpt, ac);
+        if (non010) {
+          if (triangle_vars == 0)
+            triangle_vars = vertices*(vertices-1)/2;
+          S.sms.prepare010(triangle_vars);
+        }
         double initial_time = cpuTime();
 
         S.verbosity = verb;

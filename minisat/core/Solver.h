@@ -308,6 +308,9 @@ public:
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     bool     satisfied        (const Clause& c) const; // Returns TRUE if a clause is satisfied in the current state.
 
+    void assertClauseSatisfiedOrNotFalsifiedAndStable(const Clause& clause);
+    void solverInStableState();
+
     // Misc:
     //
     int      decisionLevel    ()      const; // Gives the current decisionlevel.

@@ -690,6 +690,62 @@ bool Solver::simplify()
     return true;
 }
 
+void Solver::assertClauseSatisfiedOrNotFalsifiedAndStable(const Clause& clause) {
+    int num_satisfied = 0;
+    int num_falsified = 0;
+    int highest_dl = -1;
+    int num_highest_dl = 0;
+    for (int i = 0; i < clause.size(); i++) {
+      if (value(clause[i]) != l_Undef) {
+        if (level(var(clause[i])) > highest_dl) {
+          highest_dl = level(var(clause[i]));
+          num_highest_dl = 1;
+        } else if (level(var(clause[i])) == highest_dl) {
+          num_highest_dl++;
+        }
+        if (value(clause[i]) == l_True) {
+          num_satisfied++;
+        } else if (value(clause[i]) == l_False) {
+          num_falsified++;
+        }
+      }
+    }
+
+    // assert that a propagated clause was propagated at earliest possible time
+    if (!(num_satisfied != 1 || num_falsified != clause.size() - 1 || level(var(clause[0])) != highest_dl || num_highest_dl > 1 || value(clause[0]) == l_False)) {
+      printf("#sat = %d, #fal = %d, sz = %d, lvl0 = %d, lvl1 = %d, c[0] = %d, c[1] = %d, hdl = %d, #hdl = %d\n",
+          num_satisfied, num_falsified, clause.size(), level(var(clause[0])), level(var(clause[1])), l2i(clause[0]), l2i(clause[1]), highest_dl, num_highest_dl);
+      fflush(stdout);
+    }
+    assert (num_satisfied != 1 || num_falsified != clause.size() - 1 || level(var(clause[0])) != highest_dl || num_highest_dl > 1 || value(clause[0]) == l_False);
+    assert (num_satisfied > 0 || num_falsified + 2 <= clause.size());
+
+    //printf("clause size = %d\n", clause.size());
+    //printf("num_falsified = %d\n", num_falsified);
+    /*if (num_satisfied == 0 && num_falsified + 2 > clause.size()) {
+      printf("call no %d\n", sms.general_purpose_counter);
+      for (int i = 0; i < clause.size(); i++) {
+        char val = value(clause[i]) == l_Undef ? 'u' :
+          value(clause[i]) == l_True ? 't' : 'f';
+        int lev = value(clause[i]) == l_Undef ? -1 : level(var(clause[i]));
+        printf("%d[%c:%d]  ", l2i(clause[i]), val, lev);
+      }
+      printf("\n");
+      fflush(stdout);
+    }
+    assert(num_falsified + 2 <= clause.size());*/
+}
+
+void Solver::solverInStableState() {
+  sms.general_purpose_counter++;
+  for (int i = 0; i < clauses.size(); i++) {
+    assertClauseSatisfiedOrNotFalsifiedAndStable(ca[clauses[i]]);
+  }
+  for (int i = 0; i < learnts.size(); i++) {
+    assertClauseSatisfiedOrNotFalsifiedAndStable(ca[learnts[i]]);
+  }
+}
+
 /*_________________________________________________________________________________________________
 |
 |  search : (nof_conflicts : int) (params : const SearchParams&)  ->  [lbool]
@@ -752,6 +808,8 @@ lbool Solver::search(int nof_conflicts)
             }
 
         }else{
+
+            //solverInStableState();
 
             // NO CONFLICT
             if ((nof_conflicts >= 0 && conflictC >= nof_conflicts) || !withinBudget()){
@@ -1235,6 +1293,9 @@ bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
   if (num_unassigned == 1) {
     cancelUntil(highest_dl);
     CRef cr = ca.alloc(clause, false);
+    for (int i = 0; i < clause.size(); i++) {
+      varBumpActivity(var(clause[i]));
+    }
     clauses.push(cr);
     attachClause(cr);
     uncheckedEnqueue(clause[0], cr);
@@ -1265,6 +1326,9 @@ bool Solver::addClauseDuringSearch(vec<Lit> &&clause) {
         int second_highest_dl = level(var(clause[1]));
         cancelUntil(second_highest_dl);
         CRef cr = ca.alloc(clause, false);
+        for (int i = 0; i < clause.size(); i++) {
+          varBumpActivity(var(clause[i]));
+        }
         clauses.push(cr);
         attachClause(cr);
         uncheckedEnqueue(clause[0], cr);
