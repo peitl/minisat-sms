@@ -988,6 +988,7 @@ lbool Solver::solve_()
         ok = false;
 
     cancelUntil(0);
+    fflush(stdout);
     return status;
 }
 
