@@ -1605,4 +1605,12 @@ extern "C" {
     return s->nVars();
   }
 
+  void print_stats(void* sms_solver) {
+	  Solver* s = (Solver*) sms_solver;
+    s->sms.checker.printStats();
+    if (s->sms.prop010) {
+      s->sms.checker010.printStats();
+    }
+  }
+
 }

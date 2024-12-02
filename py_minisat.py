@@ -54,6 +54,7 @@ sms_block_model = smslib.block_model
 sms_n_vars = smslib.n_vars
 sms_trail_location = smslib.trail_location
 sms_attach_010_propagator = smslib.attach_010_propagator
+sms_print_stats = smslib.print_stats
 
 # specify function signatures
 sms_create_solver.argtypes = []
@@ -90,6 +91,8 @@ sms_trail_location.argtypes = [ct.c_void_p, ct.c_int]
 sms_trail_location.restype = ct.POINTER(Lit)
 sms_attach_010_propagator.argtypes = [ct.c_void_p, ct.c_int]
 sms_attach_010_propagator.restype = None
+sms_print_stats.argtypes = [ct.c_void_p]
+sms_print_stats.restype = None
 
 def l2i(x : int):
     s = 1 - (x % 2) * 2;
@@ -190,6 +193,8 @@ class Solver:
     def blockModel(self):
         sms_block_model(self.sms_solver)
 
+    def printStats(self):
+        sms_print_stats(self.sms_solver)
 
 
 def genPHP(n : int):
